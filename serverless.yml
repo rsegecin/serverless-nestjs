@@ -1,9 +1,22 @@
-service: serverless-nestjs
+service: auth-service
 
 provider:
   name: aws
   runtime: nodejs12.x
-  region: us-east-1
+  region: sa-east-1
+  stage: dev
+  environment:
+    REGISTER_EMAIL_TABLE: oxce-register-email-${self:provider.stage}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.REGISTER_EMAIL_TABLE}"
 
 plugins:
   - serverless-offline
@@ -18,14 +31,35 @@ package:
     - README.md
 
 functions:
-  index:
+  register:
     handler: dist/index.handler
     events:
     - http:
         cors: true
-        path: '/'
+        path: 'register/email'
         method: any
-    - http:
-        cors: true
-        path: '{proxy+}'
-        method: any
+    - schedule:
+        rate: rate(10 minutes)
+        enabled: false
+        input:
+          stageParams:
+            stage: dev
+
+resources:
+  Resources:
+    EmailNewUserDb:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: "registerEmailId"
+            AttributeType: "S"   
+        KeySchema:
+          -
+            AttributeName: "registerEmailId"
+            KeyType: "HASH"
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:provider.environment.REGISTER_EMAIL_TABLE}
